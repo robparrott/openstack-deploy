@@ -1,0 +1,47 @@
+# Place this file in your /etc/yum.repos.d/ directory
+
+[glusterfs-fedora]
+name=GlusterFS is a clustered file-system capable of scaling to several petabytes.
+baseurl=http://download.gluster.org/pub/gluster/glusterfs/3.3/3.3.1/Fedora/fedora-$releasever/$basearch/
+enabled=0
+skip_if_unavailable=1
+gpgcheck=0
+
+[glusterfs-swift-fedora]
+name=GlusterFS is a clustered file-system capable of scaling to several petabytes.
+baseurl=http://download.gluster.org/pub/gluster/glusterfs/3.3/3.3.1/Fedora/fedora-$releasever/noarch/
+enabled=0
+skip_if_unavailable=1
+gpgcheck=0
+
+[glusterfs-source-fedora]
+name=GlusterFS is a clustered file-system capable of scaling to several petabytes. - Source
+baseurl=http://download.gluster.org/pub/gluster/glusterfs/3.3/3.3.1/Fedora/fedora-$releasever/SRPMS/
+enabled=0
+skip_if_unavailable=1
+gpgcheck=0
+
+#
+# For GlusterFS UFO (gluster + Swift) for F17 (anything before F18)
+#
+[fedora-glusterfs]
+name=GlusterFS is a clustered file-system capable of scaling to several petabytes.
+baseurl=http://repos.fedorapeople.org/repos/kkeithle/glusterfs/fedora-$releasever/$basearch/
+enabled=0
+skip_if_unavailable=1
+gpgcheck=0
+
+[fedora-glusterfs-swift]
+name=GlusterFS is a clustered file-system capable of scaling to several petabytes.
+baseurl=http://repos.fedorapeople.org/repos/kkeithle/glusterfs/fedora-$releasever/noarch/
+enabled=0
+skip_if_unavailable=1
+gpgcheck=0
+
+[fedora-glusterfs-source]
+name=GlusterFS is a clustered file-system capable of scaling to several petabytes. - Source
+baseurl=http://repos.fedorapeople.org/repos/kkeithle/glusterfs/fedora-$releasever/SRPMS
+enabled=0
+skip_if_unavailable=1
+gpgcheck=0
+

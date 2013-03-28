@@ -1,0 +1,73 @@
+#
+# Configure gluster volume on fedora
+#
+
+# debugging ...
+
+# List hosts
+#- name: list out all the hosts in the group
+#  action: debug  msg="gluster_nodes = ${groups.gluster_nodes}"
+#  tags: gluster_volume
+  
+# Test the substitution
+#- name: test the substitution
+#  action: debug  msg="IP address = ${hostvars.{$item}.ansible_eth0.ipv4.address}"
+#  with_items: ${groups.gluster_nodes}  
+#  tags: gluster_volume
+
+#
+# Configure gluster peers
+#
+  
+- name: configure other gluster peers
+  action: shell gluster peer probe ${hostvars.${item}.ansible_eth0.ipv4.address}
+  with_items: ${groups.gluster_nodes}
+  tags: gluster_volume      
+         
+#
+# Build a volume
+#       
+  
+# Create a volume locally for now ...
+- name: set up a gluster volume with one brick
+  action: shell gluster volume create ${gluster_volume_name} transport tcp ${ansible_eth0.ipv4.address}:${gluster_local_storage_path}
+  tags: gluster_volume
+  ignore_errors: yes
+    
+# Add other bricks from peers to the volume
+- name: add bricks to gluster volume
+  action: shell gluster volume add-brick ${gluster_volume_name} ${gluster_vol_options} ${hostvars.{$item}.ansible_eth0.ipv4.address}:${gluster_local_storage_path}
+  with_items: ${groups.gluster_nodes}  
+  tags: gluster_volume
+  ignore_errors: yes
+        
+# Start it.
+- name: start up the gluster volume
+  action: shell gluster volume start ${gluster_volume_name}
+  tags: gluster_volume
+        
+# query it  
+- name: set up a gluster volume
+  action: shell gluster volume info
+  tags: gluster_volume
+  
+# try to mount it locally for kicks & grins ...
+
+- name: setup a mount point for the gluster fs volume
+  action: file path=/mnt/${gluster_volume_name} state=directory owner=root group=root mode=0755
+  tags: gluster_volume
+  ignore_errors: yes
+  
+- name: mount the gluster volume as another filesystem
+  action: shell mount -t glusterfs ${ansible_eth0.ipv4.address}:${gluster_volume_name} /mnt/${gluster_volume_name}
+  tags: gluster_volume
+  
+# Test it out ... 
+- name: create gluster test script
+  action: template src="gluster/templates/gluster_test.sh.j2" dest="/tmp/gluster_test.sh"  owner="root" group="root" mode="0755"
+  tags: gluster_volume
+  
+- name: run test 
+  action: shell /tmp/gluster_test.sh
+  tags: gluster_volume
+    

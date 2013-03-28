@@ -1,0 +1,87 @@
+#
+# Install swift on fedora
+#
+ 
+# 
+# Swift user
+#
+- name: create user for swift
+  action: user name=swift comment="Swift User" shell=/bin/bash home=${swift_user_home} createhome=yes state=present
+  tags: swift
+  
+- name: ensure that swift's home dir is there and sane
+  action: file path=${swift_user_home} owner=swift group=swift state=directory
+  tags: swift
+  
+#
+# Swift Packages
+#        
+
+- name: ensure we have GlusterFS repos available
+  action: copy src=gluster/files/gluster.repo  dest=/etc/yum.repos.d/gluster.repo owner=root group=root mode=0644
+  tags: swift
+  
+- name: ensure yum repo is up to date
+  action: shell yum -y update
+  tags: swift
+  
+- name: install swift packages
+  action: yum name=${item} enablerepo=${swift_repo_name} state=installed
+  with_items:
+    - glusterfs-swift 
+    - glusterfs-swift-account
+    - glusterfs-swift-container 
+    - glusterfs-swift-object 
+    - glusterfs-swift-plugin
+    - glusterfs-swift-proxy 
+    - glusterfs-swift-doc
+    - memcached
+  tags: swift
+   
+- name: startup memcached
+  action: service name=memcached state=started
+  
+# Cert generation
+
+- name: create cert creation script
+  action: template src="swift/files/mkcert-swift.sh" dest="/etc/swift/mkcert-swift.sh"  owner=${swift_user} group=${swift_user} mode="0755"
+  tags: swift
+    
+- name: create cert config
+  action: template src="swift/templates/swift-openssl.conf" dest="/etc/swift/swift-openssl.cnf"  owner=${swift_user} group=${swift_user} mode="0755"
+  tags: swift
+      
+- name: create a self-signed cert for swift
+  action: shell /etc/swift/mkcert-swift.sh 
+  tags: swift
+  
+# Configuration
+
+- name: configure the proxy service
+  action: template src="swift/templates/proxy-server.conf.j2" dest="/etc/swift/proxy-server.conf"  owner=${swift_user} group=${swift_user} mode="0600"
+  tags: swift  
+
+- name: configure the account,object, and container services
+  action: template src="swift/templates/${item}-server.conf.j2" dest="/etc/swift/${item}-server/1.conf"  owner=${swift_user} group=${swift_user} mode="0600"
+  with_items:
+  - container
+  - object
+  - account
+  tags: swift  
+  
+- name: copy configs into place
+  action: shell cd /etc/swift/ && cp ${item}-gluster ${item}
+  with_items:
+    - swift.conf
+    - fs.conf
+  tags: swift
+    
+- name: fix permissions on /etc/swift
+  action: command chown -R swift:swift /etc/swift
+  tags: swift
+    
+- name: fix permissions on gluster volume 
+  action: command chown -R swift:swift /mnt/${gluster_volume_name}
+  tags: swift
+      
+  

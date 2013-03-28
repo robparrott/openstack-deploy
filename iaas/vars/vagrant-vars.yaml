@@ -1,0 +1,9 @@
+---
+#
+# Variables related to starting vagrant instances
+# 
+
+#box_name: f17
+#box_path: http://dl.dropbox.com/u/6002490/vagrant/beefymiracle64.box
+box_name: f18
+box_path: https://dl.dropbox.com/s/gsxue3k7bw2m8b1/fedora18_x86_64_minimal.box

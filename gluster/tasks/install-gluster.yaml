@@ -1,0 +1,87 @@
+#
+# Install gluster on fedora
+#
+
+#
+# Brick mounting   
+#
+- name: setup brick FS for gluster (will fail if already formatted)
+  action: shell mkfs.xfs -f -i size=512 ${gluster_vol_device}
+  ignore_errors: yes
+  tags:
+    - brick
+  
+- name: setup a mount point for the brick
+  action: file path=${gluster_local_storage_path} state=directory
+  tags:
+    - brick
+     
+- name: create mount entry for the new brick
+  action: mount name=${gluster_local_storage_path} src=${gluster_vol_device} fstype=xfs opts=defaults  passno=2 state=mounted
+  tags:
+    - brick
+    
+              
+#- name: add an fstab entry
+#  action: lineinfile dest=/etc/fstab state=present regexp='^${gluster_vol_device}' line="${gluster_vol_device} ${gluster_local_storage_path} xfs defaults 1 2"
+#  action: lineinfile dest=/etc/fstab state=present regexp='^/dev/xvdb.*$' line="/dev/xvdb /export/brick1 xfs defaults 1 2"
+#  tags:
+#    - brick
+            
+#- name: mount volume        
+#  action: shell mount -a && mount
+#  tags:
+#    - brick
+            
+#
+# Gluster Packages
+#        
+
+- name: ensure we have GlusterFS repos available
+  action: copy src=gluster/files/gluster.repo  dest=/etc/yum.repos.d/gluster.repo owner=root group=root mode=0644
+
+- name: ensure yum repo is up to date
+  action: shell yum -y update
+
+- name: install gluster packages
+  action: yum name=${item} enablerepo=${gluster_repo_name} state=installed
+  with_items:
+     - glusterfs-server
+     - glusterfs-fuse
+      
+- name: start gluster servicev
+  action: service name=glusterd state=started
+
+#
+# SELiux & firewall
+#
+
+- name: disable SELinux
+  action: selinux policy=targeted state=permissive
+    
+#
+#  Firewall for gluster on RH-like
+#    http://gluster.org/community/documentation/index.php/Gluster_3.1:_Installing_GlusterFS_on_Red_Hat_Package_Manager_(RPM)_Distributions
+# 
+#
+# EC2 Security group settings ...
+#
+#TCP       22        0.0.0.0/0 
+#TCP 24000 - 24100  10.0.0.0/8 
+#TCP      111       10.0.0.0/8  
+#UDP      111       10.0.0.0/8  
+#TCP 38465 - 38485  10.0.0.0/8  
+
+# $ iptables -A INPUT -m state --state NEW -m tcp -p tcp --dport 24000:24100 -j ACCEPT 
+# $ iptables -A INPUT -m state --state NEW -m tcp -p tcp --dport 111         -j ACCEPT 
+# $ iptables -A INPUT -m state --state NEW -m udp -p udp --dport 111 -j ACCEPT 
+# $ iptables -A INPUT -m state --state NEW -m tcp -p tcp --dport 38465:38485 -j ACCEPT
+# $ service iptables save
+# $ service iptables restart
+# 
+- name: modify local firewall settings for gluster
+  action: copy src=gluster/files/iptables-gluster dest=/etc/sysconfig/iptables owner=root group=root mode=644 backup=yes
+  
+- name: restart local firewall for gluster
+  action: service name=iptables state=restarted
+  

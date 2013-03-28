@@ -1,0 +1,225 @@
+---
+#
+# INSTANCES
+#
+# This section fires up a set of guests dynamically, 
+#  registering them in the inventory under a relevant group
+#
+- hosts:
+  - localhost
+  connection: local
+  gather_facts: False
+  vars_files: 
+  - iaas/vars/ec2-vars.yaml
+  - gluster/vars/gluster-vars.yaml
+  tags: 
+    - vms
+    - gluster_volume
+    - gluster_volume_cleanup
+    - brick
+    - swift
+        
+  tasks:
+  - include: gluster/tasks/gluster-nodes-ec2.yaml
+
+# Dump data on these hosts.
+
+- hosts: gluster_nodes
+  vars_files: 
+  - iaas/vars/ec2-vars.yaml
+  - gluster/vars/gluster-vars.yaml 
+  user: '${remote_user}'
+  sudo: False
+  gather_facts: True
+  
+  tasks: 
+  - name: ec2 facts
+    action: ec2_facts
+    register: ec2_facts
+  - name: dump everything
+    local_action: template src=common/templates/dump.j2 dest=./ansible_data_dump.txt 
+
+   
+   
+#----------------------------
+#
+#  Setup gluster
+#
+#----------------------------
+    
+- hosts: gluster_nodes
+  vars_files: 
+  - iaas/vars/ec2-vars.yaml
+  - gluster/vars/gluster-vars.yaml 
+  user: '${remote_user}'
+  sudo: True
+  gather_facts: True
+  
+  tasks:
+  - name: dummy task to force reading of facts
+    action: debug msg="null"
+    tags: 
+    - gluster_volume
+    - gluster_volume_cleanup
+    - brick
+
+#  - include: gluster/tasks/uninstall-gluster.yaml   
+  - include: gluster/tasks/install-gluster.yaml
+
+- hosts: gluster_nodes[0:0]
+  vars_files: 
+  - iaas/vars/ec2-vars.yaml
+  - gluster/vars/gluster-vars.yaml 
+  user: '${remote_user}'
+  sudo: True
+  gather_facts: True
+  
+  tasks:
+  - include: gluster/tasks/clean-gluster.yaml
+  - include: gluster/tasks/configure-gluster.yaml
+
+  
+#----------------------------
+#
+#  Setup swift
+#
+#----------------------------
+    
+- hosts: gluster_nodes
+  vars_files: 
+  - iaas/vars/ec2-vars.yaml
+  - gluster/vars/gluster-vars.yaml 
+  - swift/vars/swift-vars.yaml 
+  user: '${remote_user}'
+  sudo: True
+  gather_facts: True
+  
+  tasks:
+  - name: ec2 facts
+    action: ec2_facts
+#  - name: dump everything
+#    local_action: template src=common/templates/dump.j2 dest=./ansible_data_dump_ec2.txt   
+  - include: swift/tasks/install-swift.yaml
+  - include: swift/tasks/setup-swift.yaml  
+  - include: swift/tasks/install-ufo-pilot.yaml
+  
+#----------------------------
+#
+#  System-level tweaks on the headnode
+#
+#   Run as root via sudo
+#
+#----------------------------
+    
+- hosts: openstack_heads
+#  vars_files: 
+#  - vars/global-vars.yaml
+  user: '${remote_user}'
+  sudo: True
+  gather_facts: True
+     
+  tasks: 
+  
+  - name: wait for system to settle
+    action: command sleep 5
+       
+  - name: turn off the firewall so we can talk to the services
+    action: service name=firewalld state=stopped
+      
+  - name: disable SELinux
+    action: selinux policy=targeted state=permissive
+
+  #
+  # Fix for NOVA
+  #  
+  # https://github.com/openstack-dev/devstack/commit/a534e0bf1a1ec0abc1d1f673af1b70fbf8239350
+
+  - name: add vagrant user to policy kit  
+    action: template src=templates/50-libvirt-vagrant.rules dest=/etc/polkit-1/rules.d/50-libvirt-vagrant.rules owner=root group=root mode=0664 
+
+  #
+  # Setup /opt/stack for tweaks
+  #
+  - name: setup /opt/stack ahead of time
+    action: file path=/opt/stack state=directory owner=vagrant group=vagrant mode=0775 
+
+
+#----------------------------
+#
+#  DEVSTACK
+#
+#----------------------------
+
+- hosts: openstack_heads
+#  vars_files: 
+#  - vars/global-vars.yaml
+  user: '${remote_user}'
+  sudo: False
+  gather_facts: True
+#  tags: 
+#  - devstack
+  
+  tasks: 
+  
+#
+# Get Devstack
+#    
+  - name: checkout devstack
+    action: git repo=${devstack_url} dest=/home/vagrant/devstack version=${devstack_branch}
+    
+  - name: create localrc
+    action: template src=templates/localrc dest=/home/vagrant/devstack/localrc owner=vagrant group=vagrant mode=0664 
+    
+  - name: create local.sh
+    action: template src=templates/local.sh dest=/home/vagrant/devstack/local.sh owner=vagrant group=vagrant mode=0775 
+
+#
+# Setup /opt/stack for tweaks
+#
+  - name: setup /opt/stack ahead of time
+    action: file path=/opt/stack state=directory owner=vagrant group=vagrant mode=0775 
+
+#
+# Put NodeJS in place
+#   
+  - name: pull nodejs  
+    action: git repo=git://github.com/creationix/nvm.git dest=/opt/stack/nvm
+      
+  - name: install nodejs
+    action: shell cd /opt/stack/nvm && source ./nvm.sh && nvm install 0.8.14 && nvm alias default 0.8.14
+         
+  - name: put node stuff into /usr/local/bin
+    action: shell sudo ln -sf /opt/stack/nvm/v0.8.14/bin/* /usr/local/bin/
+          
+  - name: put node stuff into /usr/local/lib
+    action: shell sudo ln -sf /opt/stack/nvm/v0.8.14/lib/* /usr/local/lib
+
+#
+# Fix horizon.conf for apache on F18
+#
+  - name: fix the horizon.conf file 
+    action: template 
+            src=templates/apache-horizon.template 
+            dest=/home/vagrant/devstack/files/apache-horizon.template 
+            owner=vagrant 
+            group=vagrant 
+            mode=0664 
+            
+#
+# Fix cinder to make sure that tgtd can find cindor volume config files
+#
+#  - name: make sure tgtd can find cinder config files
+#    action: shell sudo echo "include /opt/stack/data/cinder/volumes/*" >> /etc/tgt/tgtd.conf
+
+#    
+# Run Devstack (3 times!)
+#    
+  - name: run devstack
+    action: shell cd /home/vagrant/devstack && FORCE=yes ./stack.sh | tee devstack.log
+    ignore_errors: yes
+    with_items:
+      - 1
+      - 2
+      - 3
+
+ 

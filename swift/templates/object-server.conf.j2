@@ -1,0 +1,19 @@
+[DEFAULT]
+devices = /mnt/{{ gv0 }}
+mount_check = true
+bind_port = 6010
+user = {{ swift_user }}
+log_facility = LOG_LOCAL2
+
+[pipeline:main]
+pipeline = object-server
+
+[app:object-server]
+use = egg:gluster_swift_ufo#object
+
+[object-replicator]
+vm_test_mode = yes
+
+[object-updater]
+
+[object-auditor]

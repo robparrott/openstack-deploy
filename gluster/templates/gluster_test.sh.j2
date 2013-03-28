@@ -1,0 +1,33 @@
+#!/bin/bash
+
+GLUSTER_NODE={{ ansible_eth0.ipv4.address }}
+GLUSTER_REMOTE_PATH="{{ gluster_volume_name }}"
+GLUSTER_URL="${GLUSTER_NODE}:${GLUSTER_REMOTE_PATH}"
+
+MNTPT=/gluster-test-mnt
+
+mkdir -p ${MNTPT} || /bin/true
+
+echo mount -t glusterfs ${GLUSTER_URL} ${MNTPT}
+mount -t glusterfs ${GLUSTER_URL} ${MNTPT} || /bin/true
+
+for i in `seq -w 1 100`; do 
+
+   cp -rp /var/log/messages*  ${MNTPT}/copy-test-$i; 
+   
+done
+
+NUM=$( ls -lA ${MNTPT}/copy-test-* | wc -l )
+
+echo $NUM
+
+NUM2=$( ls -lA /export/brick1/copy-test-* | wc -l )
+
+echo ${NUM}/${NUM2}
+
+if [ "${NUM}" == "${NUM2}" ]; then
+  exit 0
+fi
+
+echo "file count doesn\'t match" 
+exit 1

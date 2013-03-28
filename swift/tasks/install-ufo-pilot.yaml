@@ -1,0 +1,102 @@
+#
+# Install a web gui for swift
+#
+
+#
+# modify the proxy-conf file
+#
+- name: fix pipeline for ufo-pilot
+  action: lineinfile 
+          dest=/etc/swift/proxy-server.conf 
+          state=present 
+          regexp='^pipline = $' 
+          line="pipeline = healthcheck cache tempauth staticweb tempurl formpost proxy-server"
+  tags: ufopilot  
+  
+- name: add staticweb section for ufo pilot
+  action: lineinfile 
+          dest=/etc/swift/proxy-server.conf 
+          state=present 
+          regexp='[filter:staticweb]' 
+          line="[filter:staticweb]"
+          insertafter=EOF
+  tags: ufopilot
+
+- name: add staticweb section for ufo pilot
+  action: lineinfile 
+          dest=/etc/swift/proxy-server.conf 
+          state=present 
+          regexp='use = egg:swift#staticweb' 
+          line="use = egg:swift#staticweb"
+          insertafter=EOF
+  tags: ufopilot
+    
+- name: add staticweb section for ufo pilot
+  action: lineinfile 
+          dest=/etc/swift/proxy-server.conf 
+          state=present 
+          regexp='[filter:tempurl]' 
+          line="[filter:tempurl]"
+          insertafter=EOF
+  tags: ufopilot
+
+- name: add staticweb section for ufo pilot
+  action: lineinfile 
+          dest=/etc/swift/proxy-server.conf 
+          state=present 
+          regexp='use = egg:swift#tempurl' 
+          line="use = egg:swift#tempurl"
+          insertafter=EOF
+  tags: ufopilot
+
+- name: add staticweb section for ufo pilot
+  action: lineinfile 
+          dest=/etc/swift/proxy-server.conf 
+          state=present 
+          regexp='[filter:formpost]' 
+          line="[filter:formpost]"
+          insertafter=EOF
+  tags: ufopilot
+
+- name: add staticweb section for ufo pilot
+  action: lineinfile 
+          dest=/etc/swift/proxy-server.conf 
+          state=present 
+          regexp='use = egg:swift#formpost' 
+          line="use = egg:swift#formpost"
+          insertafter=EOF
+  tags: ufopilot
+   
+- name: restart services with ufo-pilot
+  action: service name=${item} state-restarted
+  with_items:
+  - memcached
+  - gluster-swift-object
+  - gluster-swift-container
+  - gluster-swift-account
+  - gluster-swift-proxy start
+  
+#
+# Get the code
+#  
+
+- name: make sure we have wget
+  action: yum name=wget state=installed
+  tags: ufopilot
+    
+- name: Retrieve ufo-pilot and it's dependency
+  action: git repo='git://github.com/joejulian/ufopilot.git' dest=/var/www/ufopilot
+  tags: ufopilot
+
+- name: Get ufo-pilot deps
+  action: cd  /var/www/ufopilot && wget https://github.com/downloads/Caligatio/jsSHA/jsSHA-1.31.tar.bz2 && mv /tmp/jsSHA/src/sha.js . && rm -rf /tmp/jsSHA
+  tags: ufopilot
+  
+- name: push a setup scripty for ufo-pilot
+  action: template src=swift/templates/setup_ufo_pilot.sh.j2   dest="/tmp/setup_ufo_pilot.sh"  owner="root" group="root" mode="0755"
+  tags: ufopilot
+  
+- name: run ufo-pilot setup script
+  action: shell /tmp/setup_ufo_pilot.sh
+  tags: ufopilot  
+  

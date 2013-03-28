@@ -1,0 +1,15 @@
+
+  
+  #
+  # Turn off services and uninstall gluster
+  #
+- name: turn off gluster
+  action: service name=glusterd state=stopped   
+  
+- name: remove gluster packages
+  action: yum name=${item} enablerepo=${gluster_repo_name} state=absent
+  with_items:
+     - glusterfs-server
+     - glusterfs-fuse
+          
+      

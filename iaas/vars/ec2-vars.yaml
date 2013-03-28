@@ -1,0 +1,14 @@
+---
+#
+# Variables related to starting instances in EC2
+# 
+
+#ec2_image: ami-6145cc08 #Fedora 18, x86_64
+#ec2_image: ami-2ea50247 #Fedora 17, x86_64
+
+ec2_image: ami-d4b72cbd # updated F18 image by me, to cache yum updates.
+
+ec2_keypair: parrott-ec2
+ec2_sec_group: swift
+
+remote_user: ec2-user

@@ -1,0 +1,48 @@
+[DEFAULT]  
+bind_port = {{ swift_proxy_port }}
+cert_file = /etc/swift/cert.crt
+key_file = /etc/swift/cert.key
+                                                                                                                                                                                                                                                     
+user = {{ swift_user }}
+swift_dir={{ swift_user_home }}
+
+log_facility = LOG_LOCAL1                                                                                                                   
+                                                                                                                                           
+[pipeline:main]  
+# pipeline = healthcheck cache authtoken keystone proxy-server # When using OpenStack & Keystone
+pipeline = healthcheck cache tempauth proxy-server                                                                                          
+                                                                                                                                            
+[app:proxy-server]                                                                                                             
+#use = egg:swift#proxy   
+use = egg:gluster_swift_ufo#proxy
+                                                                   
+allow_account_management = true                                                                                                        
+account_autocreate = true                                                                            
+                                                                                                            
+[filter:tempauth]                                                                                                                     
+use = egg:swift#tempauth                                                                       
+user_{{ gluster_volume_name }}_{{ swift_user }} = {{ swift_admin_passwd }} .admin                     
+                                                                                                     
+[filter:healthcheck]                                                                                      
+use = egg:swift#healthcheck                                                                                                          
+                                                                                                                                   
+[filter:cache]                                                                                                                          
+use = egg:swift#memcache  
+memcache_servers = 127.0.0.1:11211
+
+#[filter:keystone]
+#paste.filter_factory = keystone.middleware.swift_auth:filter_factory
+#operator_roles = admin, swiftoperator
+
+#[filter:authtoken]
+#paste.filter_factory = keystone.middleware.auth_token:filter_factory
+#auth_port = 35357
+#auth_host = 127.0.0.1
+#auth_protocol = http
+#admin_token = ADMINTOKEN
+
+## ??? Are these needed?
+#service_port = 5000
+#service_host = 127.0.0.1
+#service_protocol = http
+#auth_token = ADMINTOKEN

@@ -1,0 +1,67 @@
+  
+#
+# Cleanup ...
+#
+  
+#
+# Clean brick to be used with gluster
+#
+- name: copy over brick cleanup shell script
+  action: copy src=gluster/files/clear-gluster-xattr.sh  dest=/tmp/clear-gluster-xattr.sh owner=root group=root mode=0755
+  tags: gluster_volume_cleanup  
+  tags:
+    - brick
+    
+- name: install attr package
+  action: yum name=${item} state=installed
+  with_items:
+     - which
+     - attr 
+     
+  tags: 
+  - gluster_volume_cleanup  
+  - brick
+        
+- name: clear out any xattributes if this was used before ...
+  action: shell /tmp/clear-gluster-xattr.sh ${gluster_local_storage_path}
+  tags: 
+  - gluster_volume_cleanup  
+  - brick
+    
+#
+# Disassemble gluster volume
+#    
+- name: unmount any gluster volumes
+  action: shell umount /mnt/${gluster_volume_name}
+  tags: 
+  - gluster_volume_cleanup  
+  
+  ignore_errors: yes
+    
+- name: list any gluster volumes
+  action: shell  gluster volume list
+  tags: 
+  - gluster_volume_cleanup  
+  ignore_errors: yes
+    
+- name: stop any gluster volumes
+  action: shell  echo "Y" | gluster volume stop ${gluster_volume_name} 
+  tags: 
+  - gluster_volume_cleanup  
+  ignore_errors: yes
+    
+- name: delete any gluster volumes
+  action: shell  echo "Y" | gluster volume delete ${gluster_volume_name}
+  tags: 
+  - gluster_volume_cleanup  
+  ignore_errors: yes   
+
+- name: remove other gluster peers
+  action: shell  echo "Y" | gluster peer detach ${hostvars.${item}.ansible_eth0.ipv4.address} force
+  with_items: ${groups.gluster_nodes}
+  tags: 
+  - gluster_volume_cleanup  
+  ignore_errors: yes   
+  
+
+      

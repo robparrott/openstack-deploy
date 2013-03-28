@@ -1,0 +1,43 @@
+#---
+#
+# This section fires up a set of guests dynamically,
+#  registering them in the inventory under a relevant group
+#
+#- hosts:
+#  - localhost
+#  connection: local
+#  gather_facts: False
+    
+#  tasks:
+- name: Fire up gluster nodes in EC2   
+  action: ec2 
+        keypair=${ec2_keypair}
+        id=gluster_nodes_${run_ID}
+        instance_type=${gluster_node_ec2_type}
+        image=${ec2_image}
+        wait=true 
+        group=${ec2_sec_group}
+        count=${N_gluster_nodes}
+  register: ec2
+  tags: 
+    - vms 
+    - gluster
+    
+- name: Capture the EC2 instance's contact info into the inventory
+  action: add_host 
+            hostname='${item.public_dns_name}' 
+            ansible_ssh_host='${item.public_ip}'
+            groupname=${gluster_group}
+  with_items: ${ec2.instances}
+  tags: 
+    - vms 
+    - gluster
+
+# Note: the "only_if" below doesn't work, because the ec2 module always returns "changed=true"
+
+#- name: Create volumes and attach (will fail if volumes already setup...)
+#  action: ec2_vol instance=${item.id} volume_size=${gluster_brick_size}
+#  with_items: ${ec2.instances}
+#  only_if: '${ec2.changed}'
+#  register: ec2_volumes
+#  ignore_errors: yes

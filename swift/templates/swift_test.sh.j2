@@ -1,0 +1,72 @@
+#!/bin/bash -x
+
+myhostname=localhost
+port={{ swift_proxy_port }}
+username={{ swift_user }}
+password={{ swift_admin_passwd }}
+myvolname={{ gluster_volume_name }} 
+mycontainername=swift-test-container
+filename=/tmp/swift_test.sh
+
+filelen=$( ls -la $0 | awk '{print $5}' )
+
+
+# Get authentication token from UFO:
+echo curl -v -H \"X-Storage-User: $myvolname:$username\" -H \"X-Storage-Pass: $password\" -k https://${myhostname}:${port}/auth/v1.0
+
+tmpf=$(mktemp)
+curl -v \
+     -H "X-Storage-User: $myvolname:$username" \
+     -H "X-Storage-Pass: $password" \
+     -k https://${myhostname}:${port}/auth/v1.0 2> $tmpf
+
+cat $tmpf
+
+authtoken=$( grep X-Storage-Token $tmpf | awk '{print $3}' )
+
+echo AUTHTOKEN: $authtoken
+
+# Create a container:
+
+curl -v \
+     -k \
+     -X PUT \
+     -H "X-Auth-Token: $authtoken" \
+     https://${myhostname}:${port}/v1/AUTH_$myvolname/$mycontainername 
+
+# List containers:
+
+curl -v \
+     -k \
+     -X GET \
+     -H "X-Auth-Token: $authtoken" \
+      https://${myhostname}:${port}/v1/AUTH_$myvolname 
+
+# Upload a file to a container:
+
+curl -v \
+     -k \
+     -X PUT \
+     -T $filename \
+     -H "X-Auth-Token: $authtoken" \
+     -H "Content-Length: $filelen" \
+     https://${myhostname}:${port}/v1/AUTH_$myvolname/$mycontainername/$filename 
+     
+# Download the file:
+
+curl -v \
+     -k \
+     -X GET \
+     -H "X-Auth-Token: $authtoken" \
+     https://${myhostname}:${port}/v1/AUTH_$myvolname/$mycontainername/$filename > ${filename}.2
+
+
+# Compare                                                                                                                                                                                                  
+diff=$( diff ${filename} ${filename}.2 )
+
+if [ -n $diff ]; then
+   echo "Files are identical."
+   exit 0
+fi
+echo "Files do not match."
+exit 1

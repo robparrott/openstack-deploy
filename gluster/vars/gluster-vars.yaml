@@ -1,0 +1,28 @@
+---
+
+run_ID: gluster-6
+
+N_gluster_nodes: 2
+gluster_node_ec2_type: m1.small
+
+gluster_group: gluster_nodes
+
+gluster_brick_size: 100
+gluster_vol_device: /dev/xvdb
+
+gluster_local_storage_path: /export/brick1
+gluster_volume_name: gv0
+gluster_vol_options: replica 2
+
+# Refer to the gluster.repo file for these values
+
+# For F17
+#gluster_repo_name: fedora-glusterfs
+#swift_repo_name: fedora-glusterfs-swift
+
+# For F18 (in Fedora updates)
+
+gluster_repo_name: updates
+swift_repo_name: updates
+
+

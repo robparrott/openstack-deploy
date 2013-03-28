@@ -1,0 +1,32 @@
+#
+# Setup it up to run ...
+#
+ 
+- name: generate swift rings as swift user
+  action: shell su - swift -c "/usr/bin/gluster-swift-gen-builders ${gluster_volume_name}"
+  tags: swift
+    
+# Startup
+
+#- name: start gluster services
+#  action: service name=gluster-swift-proxy  state=started
+#  tags: swift        
+      
+- name: run swift-init
+  action: shell swift-init main start    
+  tags: swift    
+      
+# Run test ...
+
+- name: push a test script for swift
+  action: template src=swift/templates/swift_test.sh.j2   dest="/tmp/swift_test.sh"  owner="${swift_user}" group="${swift_user}" mode="0755"
+  tags: swift
+  
+- name: run swift test script
+  action: shell /tmp/swift_test.sh
+  tags: swift  
+  
+- name: abandon ship
+  action: shell /bin/false
+  tags: swift    
+

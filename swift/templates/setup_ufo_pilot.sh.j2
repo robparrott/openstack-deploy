@@ -1,0 +1,30 @@
+#!/bin/bash -x
+
+host=http://localhost:8080
+user={{ swift_user }}
+pass={{ swift_admin_passwd }}
+volume={{ gluster_volume_name }} 
+webcon=app
+
+# Create a container to be the web app container and set the permissions and index page
+swift -A $host/auth/v1.0 -U $volume:$user -K $pass post $webcon
+swift -A $host/auth/v1.0 -U $volume:$user -K $pass post $webcon -m 'web-index:index.html'
+swift -A $host/auth/v1.0 -U $volume:$user -K $pass post $webcon -r '.r:*'
+
+# Add a key for tempurl signing
+
+swift -A $host/auth/v1.0 -U $volume:$user -K $pass post -m 'Temp-Url-Key:tempurlkey'
+
+# Change the settings in swiftapi.js to reflect your volume name and your tempurlkey:
+
+#volume: "gv0",
+#tempurlkey: "tempurlkey",
+
+#Upload these files to your web app container
+
+swift -A $host/auth/v1.0 -U $volume:$user -K $pass upload $webcon *
+
+# Open your new app in your browser My New Swift App Server
+
+echo "Open http://localhost:8080/v1/AUTH_gv0/app/ "
+

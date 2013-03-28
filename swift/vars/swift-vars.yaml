@@ -1,0 +1,4 @@
+swift_admin_passwd: qwerty123
+swift_user: swift
+swift_user_home: /var/lib/swift
+swift_proxy_port: 8443
