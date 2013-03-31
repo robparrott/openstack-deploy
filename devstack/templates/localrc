@@ -1,0 +1,162 @@
+# Sample ``localrc`` for user-configurable variables in ``stack.sh``
+
+# NOTE: Copy this file to the root ``devstack`` directory for it to
+# work properly.
+
+# ``localrc`` is a user-maintained setings file that is sourced from ``stackrc``.
+# This gives it the ability to override any variables set in ``stackrc``.
+# Also, most of the settings in ``stack.sh`` are written to only be set if no
+# value has already been set; this lets ``localrc`` effectively override the
+# default values.
+
+# This is a collection of some of the settings we have found to be useful
+# in our DevStack development environments. Additional settings are described
+# in http://devstack.org/localrc.html
+# These should be considered as samples and are unsupported DevStack code.
+
+
+# Minimal Contents
+# ----------------
+
+# While ``stack.sh`` is happy to run without ``localrc``, devlife is better when
+# there are a few minimal variables set:
+
+# If the ``*_PASSWORD`` variables are not set here you will be prompted to enter
+# values for them by ``stack.sh`` and they will be added to ``localrc``.
+ADMIN_PASSWORD={{ admin_password }}
+MYSQL_PASSWORD={{ mysql_password }}
+RABBIT_PASSWORD={{ rabbit_password }}
+SERVICE_PASSWORD=$ADMIN_PASSWORD
+
+SERVICE_TOKEN={{ service_token }}
+
+
+# ``HOST_IP`` should be set manually for best results if the NIC configuration
+# of the host is unusual, i.e. ``eth1`` has the default route but ``eth0`` is the
+# public interface.  It is auto-detected in ``stack.sh`` but often is indeterminate
+# on later runs due to the IP moving from an Ethernet interface to a bridge on
+# the host. Setting it here also makes it available for ``openrc`` to include
+# when setting ``OS_AUTH_URL``.
+# ``HOST_IP`` is not set by default.
+HOST_IP={{ ansible_eth0.ipv4.address }}
+
+#
+# Networking setup
+#------------------------
+
+FLOATING_RANGE=192.168.1.224/27
+FIXED_RANGE=10.0.0.0/24
+FIXED_NETWORK_SIZE=256
+FLAT_INTERFACE=eth0
+
+
+# Logging
+# -------
+
+# By default ``stack.sh`` output only goes to the terminal where it runs.  It can
+# be configured to additionally log to a file by setting ``LOGFILE`` to the full
+# path of the destination log file.  A timestamp will be appended to the given name.
+LOGFILE=$DEST/logs/stack.sh.log
+
+# Old log files are automatically removed after 7 days to keep things neat.  Change
+# the number of days by setting ``LOGDAYS``.
+LOGDAYS=2
+
+# Nova logs will be colorized if ``SYSLOG`` is not set; turn this off by setting
+# ``LOG_COLOR`` false.
+#LOG_COLOR=False
+
+#
+# Use specific versions: here folsom
+#
+# ---------------------------------
+
+KEYSTONE_BRANCH={{ openstack_branch }}
+GLANCE_BRANCH={{ openstack_branch }}
+NOVA_BRANCH={{ openstack_branch }}
+NOVNC_BRANCH=8dfd916946 
+CINDER_BRANCH={{ openstack_branch }}
+QUANTUM_BRANCH={{ openstack_branch }}
+HORIZON_BRANCH={{ openstack_branch }}
+SWIFT_BRANCH={{ openstack_branch }}
+SWIFT3_BRANCH=master
+
+CEILOMETER_BRANCH=master
+TEMPEST_BRANCH=master         
+HEAT_BRANCH=master
+
+OPENSTACKCLIENT_BRANCH=master
+KEYSTONECLIENT_BRANCH=master
+GLANCECLIENT_BRANCH=master 
+NOVACLIENT_BRANCH=master 
+CINDERCLIENT_BRANCH=master    
+QUANTUM_CLIENT_BRANCH=master 
+SWIFTCLIENT_BRANCH=master     
+
+#
+# Fix noVNC for use on a development host:
+#
+# --------------------------------------------
+
+NOVNCPROXY_URL=http://{{ ansible_ec2_public_ipv4 }}:6080/vnc_auto.html
+
+
+# Quantum
+# -----
+
+disable_service n-net
+
+enable_service q-svc
+enable_service q-agt
+enable_service q-dhcp
+enable_service q-l3
+enable_service q-meta
+enable_service quantum
+
+# Tempest
+#----------
+
+# Optional, to enable tempest configuration as part of devstack
+enable_service tempest
+
+# Swift
+# -----
+
+enable_service swift
+
+# Swift is now used as the back-end for the S3-like object store. If Nova's
+# objectstore (``n-obj`` in ``ENABLED_SERVICES``) is enabled, it will NOT
+# run if Swift is enabled. Setting the hash value is required and you will
+# be prompted for it if Swift is enabled so just set it to something already:
+SWIFT_HASH=66a3d6b56c1f479c8b4e70ab5c2000f5
+
+# For development purposes the default of 3 replicas is usually not required.
+# Set this to 1 to save some resources:
+SWIFT_REPLICAS=1
+
+# The data for Swift is stored in the source tree by default (``$DEST/swift/data``)
+# and can be moved by setting ``SWIFT_DATA_DIR``. The directory will be created
+# if it does not exist.
+SWIFT_DATA_DIR=$DEST/data
+
+#
+# Images to import
+# 
+IMAGE_URLS="http://launchpad.net/cirros/trunk/0.3.0/+download/cirros-0.3.0-x86_64-uec.tar.gz,http://berrange.fedorapeople.org/images/2012-11-15/f17-x86_64-openstack-sda.qcow2"
+
+#
+# EBS volume for cinder ...
+#
+#VOLUME_BACKING_FILE_SIZE=1024M
+
+#
+# Extra services
+#--------------------
+enable_service heat
+enable_service ceilometer
+
+
+
+
+
+#

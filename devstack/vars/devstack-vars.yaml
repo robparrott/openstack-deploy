@@ -1,0 +1,29 @@
+---
+
+run_ID: devstack-1
+
+devstack_url: git://github.com/openstack-dev/devstack.git
+#devstack_branch: master
+#devstack_branch: stable/folsom
+
+#openstack_branch: stable/folsom
+openstack_branch: milestone-proposed
+
+ec2_image:     ami-2ea50247   #Fedora 17, x86_64
+ec2_keypair:   parrott-ec2
+ec2_sec_group: openstack
+devstack_ec2_type: m1.medium
+
+remote_user: ec2-user
+
+cinder_volume_size: 13
+
+admin_password: nomoresecrete
+mysql_password: stackdb
+rabbit_password: stackqueue
+service_token: 012345BANANA012345
+
+test_project_name: test_project
+test_username: test_user
+test_user_email: parrott@g.harvard.edu
+test_user_password: nomoresecrete

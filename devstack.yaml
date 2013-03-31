@@ -1,0 +1,219 @@
+---
+# Fire up a OpenStack instance in EC2 using DevStack script ....
+#
+# INSTANCES
+#
+# This section fires up a set of guests dynamically, 
+#  registering them in the inventory under a relevant group
+#
+
+
+- hosts:
+  - localhost
+  connection: local
+  gather_facts: False
+  vars_files: 
+  - iaas/vars/ec2-vars.yaml
+  - devstack/vars/devstack-vars.yaml
+          
+  tasks:
+  - name: Fire up a node in EC2   
+    action: ec2 
+        keypair=${ec2_keypair}
+        id=devstack_8
+        instance_type=${devstack_ec2_type}
+        image=${ec2_image}
+        wait=true 
+        group=${ec2_sec_group}
+    register: ec2
+
+  - name: Capture the EC2 instance's contact info into the inventory
+    action: add_host 
+            hostname='${item.public_dns_name}' 
+            ansible_ssh_host='${item.public_ip}'
+            groupname=devstack
+    with_items: ${ec2.instances}
+
+# Note: the "only_if" below doesn't work, because the ec2 module always returns "changed=true"
+
+#  - name: Create volumes and attach (will fail if volumes already setup...)
+#    action: ec2_vol instance=${item.id} volume_size=${cinder_volume_size}
+#    with_items: ${ec2.instances}
+#    only_if: '${ec2.changed}'
+#    register: ec2_volumes
+#    ignore_errors: yes
+
+#
+# Dump data on these hosts.
+#
+- hosts: devstack
+  vars_files: 
+  - iaas/vars/ec2-vars.yaml
+  - devstack/vars/devstack-vars.yaml
+  user: '${remote_user}'
+  sudo: False
+  gather_facts: True
+  
+  tasks: 
+  - name: ec2 facts
+    action: ec2_facts
+    register: ec2_facts
+    
+  - name: dump everything
+    local_action: template src=common/templates/dump.j2 dest=./ansible_data_dump.txt 
+
+#---------------------------------
+# Bootstrap needed packages first,
+#  and let me run as sudo
+#---------------------------------
+    
+- hosts: devstack
+  vars_files:
+  - iaas/vars/ec2-vars.yaml
+  - devstack/vars/devstack-vars.yaml
+  user: '${remote_user}'
+  sudo: True
+  gather_facts: True
+     
+  tasks: 
+      
+  - name: let me run as sudo
+    action: lineinfile dest=/etc/sudoers regexp="^Defaults *requiretty" state=absent
+        
+  - name: install basic packages
+    action: yum name=${item} state=present
+    with_items:
+      - git
+      - which
+      - bind-utils
+      - tar
+      - gzip
+      - lvm2
+      - emacs-nox
+
+  - name: write our own local iptables rules
+    action: copy src=devstack/files/iptables-devstack  dest=/etc/sysconfig/iptables owner=root group=root mode=0600
+    
+  # this is "firewalld" for F18  
+  - name: turn off the firewall so we can talk to the services
+    action: service name=iptables state=reloaded
+
+  - name: disable SELinux
+    action: selinux policy=targeted state=permissive
+
+  #
+  # Fix for ceilomter: install mondodb
+  #  
+  - name: install mongodb
+    action: yum name=mongodb-server state=present
+  
+  #
+  # Fix for NOVA on Fedora 18
+  #  
+  # https://github.com/openstack-dev/devstack/commit/a534e0bf1a1ec0abc1d1f673af1b70fbf8239350
+
+#  - name: add devstack user to policy kit  
+#    action: template src=devstack/templates/50-libvirt-user.rules dest=/etc/polkit-1/rules.d/50-libvirt-${remote_user}.rules owner=root group=root mode=0664 
+
+
+  #
+  # Setup /opt/stack for tweaks
+  #
+  - name: setup /opt/stack ahead of time
+    action: file path=/opt/stack state=directory owner=${remote_user} group=${remote_user} mode=0775 
+
+  #
+  # Setup a volume group from the EBS volume we mounted
+  #
+  - name: setup a volume group for Cinder
+    action: lvg pvs=/dev/xvdb vg=stack-volumes state=present
+  
+#----------------------------
+#
+#  Put NodeJS in place
+#    for horizon
+#
+#----------------------------  
+- hosts: devstack
+  vars_files: 
+  - iaas/vars/ec2-vars.yaml
+  - devstack/vars/devstack-vars.yaml
+  user: '${remote_user}'
+  sudo: False
+  gather_facts: True
+  
+  tasks:
+
+# yum localinstall --nogpgcheck http://nodejs.tchol.org/repocfg/fedora/nodejs-stable-release.noarch.rpm
+# yum -y install nodejs nodejs-compat-symlinks
+# systemctl restart httpd.service
+
+  - name: pull nodejs  
+    action: git repo=git://github.com/creationix/nvm.git dest=/opt/stack/nvm
+      
+  - name: install nodejs
+    action: shell cd /opt/stack/nvm && source ./nvm.sh && nvm install 0.8.14 && nvm alias default 0.8.14
+         
+  - name: put node stuff into /usr/local/bin
+    action: shell sudo ln -sf /opt/stack/nvm/v0.8.14/bin/* /usr/local/bin/
+          
+  - name: put node stuff into /usr/local/lib
+    action: shell sudo ln -sf /opt/stack/nvm/v0.8.14/lib/* /usr/local/lib
+
+
+        
+#----------------------------
+#
+#  Pull & configure DevStack
+#
+#----------------------------
+    
+- hosts: devstack
+  vars_files: 
+  - iaas/vars/ec2-vars.yaml
+  - devstack/vars/devstack-vars.yaml
+  user: '${remote_user}'
+  sudo: False
+  gather_facts: True
+  
+  tasks:
+  
+  - name: ec2 facts
+    action: ec2_facts
+    register: ec2_facts
+  
+  - name: add paths as needed
+    action: copy src=devstack/files/bashrc dest=/home/${remote_user}/.bashrc 
+
+#
+# Get Devstack
+#    
+  - name: checkout devstack
+    action: git repo=${devstack_url} dest=/home/${remote_user}/devstack version=${devstack_branch}
+    
+  - name: create localrc
+    action: template src=devstack/templates/localrc dest=/home/${remote_user}/devstack/localrc owner=${remote_user} group=${remote_user} mode=0664 
+    
+  - name: create local.sh
+    action: template src=devstack/templates/local.sh dest=/home/${remote_user}/devstack/local.sh owner=${remote_user} group=${remote_user} mode=0775 
+
+#
+# Fix horizon.conf for apache on F18
+#
+#  - name: fix the horizon.conf file 
+#    action: template 
+#            src=templates/apache-horizon.template 
+#            dest=/home/vagrant/devstack/files/apache-horizon.template 
+#            owner=vagrant 
+#            group=vagrant 
+#            mode=0664 
+
+#  - name: abandon ship
+#    action: shell /bin/false
+#    tags: swift    
+      
+      
+  - name: run devstack
+    action: shell cd ./devstack && ./unstack.sh && FORCE=yes ./stack.sh 2>&1 > devstack.log
+
+  

@@ -1,0 +1,57 @@
+# Firewall configuration written by ansible for OpenStack
+
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+-A INPUT -p icmp -j ACCEPT
+-A INPUT -i lo -j ACCEPT
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT
+
+# Web
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 80 -j ACCEPT
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 443 -j ACCEPT
+
+# Nova Compute
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 8774 -j ACCEPT
+
+# networking (Quantum)
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 9696 -j ACCEPT
+
+# S3
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 3333 -j ACCEPT
+
+# Image (Glance)
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 9292 -j ACCEPT
+
+# Metering (Ceilometer)
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 8777 -j ACCEPT
+
+# Cloudformation (Heat)
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 8000 -j ACCEPT 
+
+# Volume service (Conder) 
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 8777 -j ACCEPT
+
+# EC2 Api port
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 8773 -j ACCEPT
+
+# Orchestration (Heat)
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 8004 -j ACCEPT 
+
+# Object Store (Nova)
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 8080 -j ACCEPT
+
+# Keystone
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 5000 -j ACCEPT
+
+# Console Access: NoVNC & Spice
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 6080 -j ACCEPT
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 6082 -j ACCEPT
+
+
+-A INPUT -j REJECT --reject-with icmp-host-prohibited
+-A FORWARD -j REJECT --reject-with icmp-host-prohibited
+COMMIT
+
