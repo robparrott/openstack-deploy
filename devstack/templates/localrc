@@ -113,6 +113,9 @@ enable_service q-l3
 enable_service q-meta
 enable_service quantum
 
+# try using GRE
+#ENABLE_TENANT_TUNNELS=True
+
 # Tempest
 #----------
 
