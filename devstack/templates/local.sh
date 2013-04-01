@@ -127,9 +127,3 @@ quantum security-group-rule-create --tenant-id ${PROJECT_ID} --direction ingress
 quantum security-group-rule-create --tenant-id ${PROJECT_ID} --direction ingress --protocol tcp --port_range_min 22  --port_range_max 22  --remote-ip-prefix 0.0.0.0/0 ${SEC_GROUP_ID}
 quantum security-group-rule-create --tenant-id ${PROJECT_ID} --direction ingress --protocol tcp --port_range_min 80  --port_range_max 80  --remote-ip-prefix 0.0.0.0/0 ${SEC_GROUP_ID}
 quantum security-group-rule-create --tenant-id ${PROJECT_ID} --direction ingress --protocol tcp --port_range_min 443 --port_range_max 443 --remote-ip-prefix 0.0.0.0/0 ${SEC_GROUP_ID}
-
-#
-# FIXES
-#
-#sudo echo "include /opt/stack/data/cinder/volumes/*" >> /etc/tgt/tgtd.conf
-#sudo service tgtd restart
