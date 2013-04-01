@@ -20,7 +20,7 @@
   - name: Fire up a node in EC2   
     action: ec2 
         keypair=${ec2_keypair}
-        id=devstack_8
+        id=devstack_1
         instance_type=${devstack_ec2_type}
         image=${ec2_image}
         wait=true 
@@ -96,7 +96,7 @@
     
   # this is "firewalld" for F18  
   - name: turn off the firewall so we can talk to the services
-    action: service name=iptables state=reloaded
+    action: service name=iptables state=restarted
 
   - name: disable SELinux
     action: selinux policy=targeted state=permissive
