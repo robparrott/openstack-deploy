@@ -5,6 +5,9 @@ Set of ansible playbooks for doing deployment
 studies of OpenStack and Releated technologuies 
 in EC2, locally in Vagrant, or on hardware.
 
+The goal will be to have a full ansible-based install in EC2 on multiple hosts,
+that can then be adapted to use with physical hosts quickly.
+
 Requirements
 ============
 
@@ -20,5 +23,29 @@ Playbooks
 =========
 
 Devstack
+--------
+This playbook will fire up an EC2 instance, attach a volume, and then deploy 
+a full OpenStack instance on it, with all the bells and whistles including
+heat and ceilometer.
+
+This uses the development scripts from the devstack team:
+
+* http://devstack.org
+
+Invoke the playbook via
+
+    $ ansible-playbook -v -i ansible_hosts devstack.yaml
+
+Note: the ansible_hosts file just includes localhost, since the inventory is 
+built dynamically based on queries with EC2.
+
+To edit various single values of the deployment, such as passwords, volume size,
+and the version of the OpenStack components to install, refer to the file at
+./devstack/var/devstack_vars.yaml
+
+To swap in the IaaS or host setup to use, modify the first "play" in the devstack.yaml playbook accordingly.
 
 Gluster
+-------
+This playbook installs a gluster cluster in EC2 based on the Fedora Gluster UFO stack, with a 
+Swift object storage front end.
