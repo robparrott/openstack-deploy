@@ -6,9 +6,11 @@
 #ec2_image: ami-6145cc08 #Fedora 18, x86_64
 #ec2_image: ami-2ea50247 #Fedora 17, x86_64
 
-ec2_image: ami-d4b72cbd # updated F18 image by me, to cache yum updates.
+#ec2_image: ami-d4b72cbd # updated F18 image by me, to cache yum updates.
+
+ec2_image: ami-52009e3b # CentOS 6.4 from Bashton.com
 
 ec2_keypair: parrott-ec2
-ec2_sec_group: swift
+ec2_sec_group: openstack
 
 remote_user: ec2-user

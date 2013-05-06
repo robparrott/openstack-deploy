@@ -1,0 +1,29 @@
+---
+
+run_ID: packstack7
+
+
+#ec2_image: ami-2ea50247   #Fedora 17, x86_64
+ec2_image: ami-52009e3b # CentOS 6.4 from Bashton.com
+
+ec2_keypair:   parrott-ec2
+ec2_sec_group: openstack
+ec2_type: m1.medium
+
+remote_user: ec2-user
+
+cinder_volume_size: 51
+cinder_volume_dev: xvdj
+cinder_vg_name: cinder-volumes
+
+repo_rpm: http://rdo.fedorapeople.org/openstack/openstack-grizzly/rdo-release-grizzly-1.noarch.rpm
+
+#admin_password: nomoresecrete
+#mysql_password: stackdb
+#rabbit_password: stackqueue
+#service_token: 012345BANANA012345
+
+test_project_name: test_project
+test_username: test_user
+test_user_email: parrott@g.harvard.edu
+test_user_password: bananaDaiquiri

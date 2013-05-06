@@ -1,0 +1,3 @@
+Defaults:{{ remote_user }} !requiretty
+
+{{ remote_user }}  ALL = NOPASSWD: ALL

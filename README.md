@@ -22,6 +22,20 @@ To run in EC2 or vagrant, you'll need the prereqs for those tools as well.
 Playbooks
 =========
 
+Packstack
+---------
+
+This playbook uses RDO and the packstack utility to build an all-in-one OpenStack 
+instance, typically in EC2. It then converts then instance from using nova-network
+to using quantum, and sets up a demo environment. For info on RDO, see
+
+* http://openstack.redhat.com
+
+Modify the vars file in packsrtack.vars.yaml, then invoke the playbook via
+
+    $ ansible-playbook -v -i ansible_hosts rdo-packstack.yaml
+
+
 Devstack
 --------
 This playbook will fire up an EC2 instance, attach a volume, and then deploy 
