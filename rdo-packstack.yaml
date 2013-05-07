@@ -36,7 +36,9 @@
         wait=true 
         group=${ec2_sec_group}
     register: ec2
-    tags: quantum
+    tags: 
+      - quantum
+      - images
     
   - name: Capture the EC2 instance's contact info into the inventory
     action: add_host 
@@ -44,7 +46,9 @@
             ansible_ssh_host='${item.public_ip}'
             groupname=rdo
     with_items: ${ec2.instances}
-    tags: quantum
+    tags: 
+      - quantum
+      - images 
     
 # Note: the "only_if" below doesn't work, because the ec2 module always returns "changed=true"
 
@@ -161,6 +165,25 @@
                        create=yes
                        line="source /root/keystonerc_admin"
             
+  - name: modify novnc to acommodate EC2 NATing
+    action:  lineinfile dest=/etc/nova/nova.conf
+                       regexp="^novncproxy_base_url=" 
+                       state=present 
+                       create=yes
+                       line="novncproxy_base_url=http://${ansible_eth0.ipv4.address}:6080/vnc_auto.html"
+    
+  - name: restart after this change
+    action: service name=${item} state=restarted
+    with_items:
+       - openstack-nova-api
+       - openstack-nova-cert
+       - openstack-nova-compute
+       - openstack-nova-conductor
+       - openstack-nova-console
+       - openstack-nova-consoleauth
+       - openstack-nova-novncproxy
+       - openstack-nova-scheduler
+                  
 #------------------------------------
 # Swap out nova-network for quantum
 #------------------------------------
@@ -334,8 +357,10 @@
 
 
 
-#---------------------
+#----------------------
+#
 # Run a test script
+#
 #----------------------
 
   - name: push a script for creating a test setup
@@ -345,7 +370,26 @@
   - name: run test script
     action: shell . /root/keystonerc_admin && /tmp/test-setup.sh
     tags: quantum
+
+#------------------------
+# Load some images   
+#------------------------
+
+  - name: push a script for upload VM images
+    action: copy src=common/files/upload-image.sh
+                 dest=/tmp/upload-image.sh
+                 owner=root group=root mode=755
+    tags: images
     
+  - name: push some images ...
+    action: shell . /root/keystonerc_admin && /tmp/upload-image.sh ${item}
+    with_items:
+      - http://download.cirros-cloud.net/0.3.1/cirros-0.3.1-x86_64-uec.tar.gz
+      - http://download.cirros-cloud.net/0.3.1/cirros-0.3.1-x86_64-disk.img  
+      - http://smoser.brickies.net/ubuntu/ttylinux-uec/ttylinux-uec-amd64-11.2_2.6.35-15_1.tar.gz         
+      - http://cloud-images.ubuntu.com/quantal/current/quantal-server-cloudimg-amd64-disk1.img
+      - http://mattdm.fedorapeople.org/cloud-images/Fedora18-Cloud-x86_64-latest.qcow2        
+    tags: images  
 # 
 # Setup various extras
 #
