@@ -8,6 +8,8 @@ function get_id
 }
 
 source /root/keystonerc_admin
+PUBLIC_IP={{ ansible_ec2_public_ipv4 }} 
+PRIVATE_IP={{ ansible_eth0.ipv4.address }}
                 
 #
 # Create a quantum service
@@ -21,14 +23,16 @@ fi
 # Create an endpoint for quantum
 
 Q_ENDPOINT_ID=$( get_id endpoint ":9696" )
-if [ -z "$Q_ENDPOINT_ID" ]; then
-   keystone endpoint-create --region RegionOne \
-                            --service-id $Q_SERVICE_ID  \
-                            --publicurl "http://127.0.0.1:9696" \
-                            --adminurl "http://127.0.0.1:9696" \
-                            --internalurl "http://127.0.0.1:9696"
-   Q_ENDPOINT_ID=$( get_id endpoint ":9696" )
-fi   
+if ! [ -z "$Q_ENDPOINT_ID" ]; then
+   keystone endpoint-delete $Q_ENDPOINT_ID
+fi
+
+keystone endpoint-create --region RegionOne \
+                            --service-id ${Q_SERVICE_ID}  \
+                            --publicurl   "http://${PUBLIC_IP}:9696" \
+                            --adminurl    "http://${PUBLIC_IP}:9696" \
+                            --internalurl "http://${PUBLIC_IP}:9696"
+Q_ENDPOINT_ID=$( get_id endpoint ":9696" )  
    
 # Create a user for the quantum service
 

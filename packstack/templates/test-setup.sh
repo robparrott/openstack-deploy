@@ -60,7 +60,7 @@ fi
 
 ROLE_ID=$( get_k_id role "Member" )
 USER_ID=$( get_k_id user ${USERNAME}  )
-if [ -z "$PROJECT_ID" ]; then
+if [ -z "$USER_ID" ]; then
   keystone user-create --name=${USERNAME} --pass=${PASSWD} --tenant-id ${PROJECT_ID} --email=${EMAIL}
   USER_ID=$( get_k_id user ${USERNAME}  )
   keystone user-role-add --tenant-id ${PROJECT_ID} --user-id ${USER_ID} --role-id ${ROLE_ID}

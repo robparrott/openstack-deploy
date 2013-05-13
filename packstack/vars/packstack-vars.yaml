@@ -1,6 +1,6 @@
 ---
 
-run_ID: packstack7
+run_ID: packstack19
 
 
 #ec2_image: ami-2ea50247   #Fedora 17, x86_64
@@ -8,7 +8,7 @@ ec2_image: ami-52009e3b # CentOS 6.4 from Bashton.com
 
 ec2_keypair:   parrott-ec2
 ec2_sec_group: openstack
-ec2_type: m1.medium
+ec2_type: m1.large
 
 remote_user: ec2-user
 

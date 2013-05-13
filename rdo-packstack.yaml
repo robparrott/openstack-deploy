@@ -39,7 +39,8 @@
     tags: 
       - quantum
       - images
-    
+      - wip
+      
   - name: Capture the EC2 instance's contact info into the inventory
     action: add_host 
             hostname='${item.public_dns_name}' 
@@ -49,6 +50,7 @@
     tags: 
       - quantum
       - images 
+      - wip
     
 # Note: the "only_if" below doesn't work, because the ec2 module always returns "changed=true"
 
@@ -69,7 +71,10 @@
   user: '${remote_user}'
   sudo: False
   gather_facts: True
-  
+  tags: 
+    - wip
+    - quantum
+    
   tasks: 
   - name: ec2 facts
     action: ec2_facts
@@ -78,7 +83,11 @@
   - name: dump everything
     local_action: template src=common/templates/dump.j2 dest=./ansible_data_dump.txt 
 
-
+#******************************
+#*
+#*  BUILD IT
+#*
+#******************************
     
 - hosts: rdo
   vars_files:
@@ -89,7 +98,18 @@
   gather_facts: True
      
   tasks: 
-      
+
+  - name: ec2 facts
+    action: ec2_facts
+    register: ec2_facts
+    tags: 
+      - wip
+      - quantum
+              
+  - name: dump everything
+    action: template src=common/templates/dump.j2 dest=/tmp/ec2_data_dump.txt 
+    tags: wip
+                  
 #---------------------------------
 # Bootstrap needed packages first,
 #  setup volumes etc., and 
@@ -106,7 +126,7 @@
                        regexp="^exclude=cloud-init" 
                        state=present 
                        create=yes
-                       line="exclude=cloud-init"     
+                       line="exclude=cloud-init kernel*"     
                           
   - name: upgrade lots of packages
     action: shell yum -y upgrade
@@ -122,6 +142,7 @@
       - lvm2
       - screen
       - emacs-nox
+      - telnet
 
   - name: setup ssh keys for root
     action: shell cd /root/.ssh && rm -f id_rsa* && ssh-keygen -f id_rsa -t rsa -N '' && cat id_rsa.pub >> authorized_keys 
@@ -135,10 +156,10 @@
     action: lvg pvs=/dev/${cinder_volume_dev} vg=${cinder_vg_name} state=present
     ignore_errors: yes
         
-#------------------------------------
+#--------------------------------------------------------------------------------------------------
 # Build basic all-in-one OpenStack 
 #   instance using  packstack & RDO
-#------------------------------------
+#--------------------------------------------------------------------------------------------------
 
   - name: install the RDO repos
     action: shell yum install -y ${repo_rpm}
@@ -151,42 +172,47 @@
     action: copy src=packstack/files/swift_common.pp 
                  dest=/usr/lib/python2.6/site-packages/packstack/puppet/templates/swift_common.pp 
                  owner=root group=root mode=644 backup=yes  
-                                      
+                     
+#  - name: create a packstack answer file, if not already present
+#    action: shell [ -f /tmp/answers.txt ] || packstack --gen-answer-file=/tmp/answers.txt
+#    tags: wip
+
+  - name: push a script to setup an answers file
+    action: template src=packstack/templates/setup-answers-file.sh 
+                     dest=/tmp/setup-answers-file.sh  
+                     owner=${remote_user} group=${remote_user} mode=0775 
+         
+  - name: create the answers file  
+    action: shell /tmp/setup-answers-file.sh 
+                                          
   - name: run packstack 
-    action: shell packstack --allinone    
+    action: shell [ -f /tmp/packstack ] || touch /tmp/packstack && packstack --answer-file=/tmp/answers.txt   
     
-  - name: capture configured values
-    action: shell cp $( ls -1 /root/packstack-answers-[0-9]*.txt | tail -1 ) /root/packstack-answers-current.txt
-       
   - name: setup credentials for keystone
     action: lineinfile dest=/root/.bashrc 
                        regexp="^source /root/keystonerc_admin" 
                        state=present 
                        create=yes
                        line="source /root/keystonerc_admin"
-            
-  - name: modify novnc to acommodate EC2 NATing
-    action:  lineinfile dest=/etc/nova/nova.conf
-                       regexp="^novncproxy_base_url=" 
-                       state=present 
-                       create=yes
-                       line="novncproxy_base_url=http://${ansible_eth0.ipv4.address}:6080/vnc_auto.html"
-    
+               
   - name: restart after this change
     action: service name=${item} state=restarted
     with_items:
        - openstack-nova-api
        - openstack-nova-cert
-       - openstack-nova-compute
        - openstack-nova-conductor
        - openstack-nova-console
        - openstack-nova-consoleauth
        - openstack-nova-novncproxy
        - openstack-nova-scheduler
-                  
-#------------------------------------
+       - openstack-nova-compute
+       
+#  - name: bail
+#    action: shell exit 1   
+                   
+#--------------------------------------------------------------------------------------------------
 # Swap out nova-network for quantum
-#------------------------------------
+#--------------------------------------------------------------------------------------------------
 
 # 1. Terminate nova networking
 
@@ -195,17 +221,19 @@
     tags: quantum
     
 # 2. Install quantum service
+
   - name: install quantum packages 
     action: yum name=openstack-quantum state=present 
     tags: quantum
         
-# 3. Install OpenvSwicth plugin
+# 3. Install OpenvSwitch plugin
 
   - name: install openvswitch plugin for quantum
     action: yum name=openstack-quantum-openvswitch state=present 
     tags: quantum
         
-# 4. The Quantum installation scripts make use of keystone environment variables. Make sure that the administrator environment variables are set.
+# 4. The Quantum installation scripts make use of keystone environment variables.
+#     Make sure that the administrator environment variables are set.
 
 
 # 5. Configure quantum service 
@@ -221,30 +249,15 @@
     action: shell /tmp/quantum-setup.sh server
     tags: quantum
         
+  
   - name: fix the quantum config for running sudo jobs
-    action: lineinfile dest=/etc/quantum/quantum.conf
-                       regexp="root_helper = " 
-                       state=present 
-                       create=yes
-                       line="root_helper = sudo quantum-rootwrap /etc/quantum/rootwrap.conf"
+    action: shell openstack-config --set /etc/quantum/quantum.conf DEFAULT root_helper "sudo quantum-rootwrap /etc/quantum/rootwrap.conf"
+    tags: quantum    
+    
+  - name: configure security groups
+    action: shell openstack-config --set /etc/quantum/quantum.conf SECURITYGROUP firewall_driver quantum.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
     tags: quantum
-          
-  - name: create security groups section header
-    action: lineinfile dest=/etc/quantum/quantum.conf
-                       regexp="SECURITYGROUP" 
-                       state=present 
-                       create=yes
-                       line="[SECURITYGROUP]"
-    tags: quantum
-                                              
-  - name: set firewall driver
-    action: lineinfile dest=/etc/quantum/quantum.conf
-                       regexp="firewall_driver = " 
-                       state=present 
-                       create=yes
-                       line="firewall_driver = quantum.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver"
-                       insertafter="[SECURITYGROUP]"                       
-    tags: quantum                             
+                                  
                              
 # 6.1. The above script will ask if the nova parameters need to be updated. 
 #  Restart the nova compute service. The script will configure Quantum as the networking module for Nova.
@@ -333,7 +346,7 @@
     
 # Setup some quantum services and objects
 
-  - name: push a script for a quantum setup
+  - name: push a script for a quantum reqistration in keystone
     action: template src=packstack/templates/quantum-registration-script.sh 
                      dest=/tmp/quantum-registration-script.sh 
                      owner=${remote_user} group=${remote_user} mode=0775 
@@ -346,16 +359,33 @@
   - name: restart quantum-relevant services
     action: service name=${item} state=restarted
     with_items:
-      - openstack-nova-compute
       - openstack-nova-conductor
       - openstack-nova-api
       - openstack-keystone
+      - openstack-nova-compute 
       - httpd
     tags: quantum
           
+  - name: push a script to setup some basic quantum network objects for the admin user/tenant
+    action: template src=packstack/templates/setup-admin-resources.sh 
+                     dest=/tmp/setup-admin-resources.sh  
+                     owner=${remote_user} group=${remote_user} mode=0775 
+    tags: 
+      - quantum      
+      - wip
+    
+  - name: setup quantum objects for admin user
+    action: shell  . /root/keystonerc_admin && /tmp/setup-admin-resources.sh 
+    tags: 
+      - quantum      
+      - wip
+
+  - name: last step -- see if nove compute successfully restarted, and if not get it running
+    action: shell sleep 2 && /etc/init.d/openstack-nova-compute restart 
+    tags: 
+      - quantum      
+      - wip
       
-
-
 
 #----------------------
 #
@@ -390,10 +420,12 @@
       - http://cloud-images.ubuntu.com/quantal/current/quantal-server-cloudimg-amd64-disk1.img
       - http://mattdm.fedorapeople.org/cloud-images/Fedora18-Cloud-x86_64-latest.qcow2        
     tags: images  
-# 
-# Setup various extras
-#
-        
+
+#--------------------------------------------------------------------------------------------------
+# Setup Ceilometer
+#--------------------------------------------------------------------------------------------------
+
+    
   #
   # Fix for ceilometer: install mondodb
   #  
