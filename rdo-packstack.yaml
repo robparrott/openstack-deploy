@@ -54,12 +54,12 @@
     
 # Note: the "only_if" below doesn't work, because the ec2 module always returns "changed=true"
 
-  - name: Create volumes and attach (will fail if volumes already setup...)
-    action: ec2_vol instance=${item.id} volume_size=${cinder_volume_size}
-    with_items: ${ec2.instances}
-    only_if: '${ec2.changed}'
-    register: ec2_volumes
-    ignore_errors: yes
+#  - name: Create volumes and attach (will fail if volumes already setup...)
+#    action: ec2_vol instance=${item.id} volume_size=${cinder_volume_size}
+#    with_items: ${ec2.instances}
+#    only_if: '${ec2.changed}'
+#    register: ec2_volumes
+#    ignore_errors: yes
 
 #
 # Dump data on these hosts.
@@ -143,6 +143,7 @@
       - screen
       - emacs-nox
       - telnet
+
 
   - name: setup ssh keys for root
     action: shell cd /root/.ssh && rm -f id_rsa* && ssh-keygen -f id_rsa -t rsa -N '' && cat id_rsa.pub >> authorized_keys 
@@ -251,11 +252,19 @@
         
   
   - name: fix the quantum config for running sudo jobs
-    action: shell openstack-config --set /etc/quantum/quantum.conf DEFAULT root_helper "sudo quantum-rootwrap /etc/quantum/rootwrap.conf"
+    action: shell openstack-config 
+                     --set /etc/quantum/quantum.conf 
+                     DEFAULT 
+                     root_helper 
+                     "sudo quantum-rootwrap /etc/quantum/rootwrap.conf"
     tags: quantum    
     
   - name: configure security groups
-    action: shell openstack-config --set /etc/quantum/quantum.conf SECURITYGROUP firewall_driver quantum.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
+    action: shell openstack-config 
+                    --set /etc/quantum/quantum.conf 
+                    SECURITYGROUP 
+                    firewall_driver 
+                    quantum.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
     tags: quantum
                                   
                              
@@ -370,21 +379,15 @@
     action: template src=packstack/templates/setup-admin-resources.sh 
                      dest=/tmp/setup-admin-resources.sh  
                      owner=${remote_user} group=${remote_user} mode=0775 
-    tags: 
-      - quantum      
-      - wip
+    tags: quantum      
     
   - name: setup quantum objects for admin user
     action: shell  . /root/keystonerc_admin && /tmp/setup-admin-resources.sh 
-    tags: 
-      - quantum      
-      - wip
+    tags: quantum      
 
   - name: last step -- see if nove compute successfully restarted, and if not get it running
     action: shell sleep 2 && /etc/init.d/openstack-nova-compute restart 
-    tags: 
-      - quantum      
-      - wip
+    tags: quantum      
       
 
 #----------------------
@@ -393,8 +396,10 @@
 #
 #----------------------
 
-  - name: push a script for creating a test setup
-    action: template src=packstack/templates/test-setup.sh dest=/tmp/test-setup.sh owner=${remote_user} group=${remote_user} mode=0775 
+  - name: push a script for creating a test user and group setup
+    action: template src=packstack/templates/test-setup.sh 
+                     dest=/tmp/test-setup.sh 
+                     owner=${remote_user} group=${remote_user} mode=0775 
     tags: quantum
         
   - name: run test script
@@ -496,5 +501,54 @@
 
 # sudo mv F17-x86_64-cfntools.qcow2 /var/lib/libvirt/images
 # glance add name=F17-x86_64-cfntools is_public=true disk_format=qcow2 container_format=bare < /var/lib/libvirt/images/F17-x86_64-cfntools.qcow2
+
+
+#------------------------
+#
+#   Run Tests 
+#
+#------------------------
+
+  - name: pull tempest code 
+    git: repo=git://github.com/openstack/tempest.git  dest=/tmp/tempest version=stable/grizzly
+    tags: wip
+    
+  - name: install python yum modules needed to test
+    action: yum name=${item} state=present
+    with_items:
+      - python-testtools
+      - python-pip
+    tags: wip  
+          
+#  - name: install python modules via pip needed to test
+#    action: pip name=testresources state=present
+#   tags: wip
+
+  - name: install python modules via pip needed to test
+    action: shell pip-python install ${item}
+    with_items:
+      - testtools
+      - testresources
+    tags: wip  
+    
+            
+  - name: copy over a script to setup the tests
+    action: template src=packstack/templates/setup-tempest.sh
+                 dest=/tmp/setup-tempest.sh
+                 owner=root group=root mode=755
+    tags: wip                
+
+  - name: setup the tests
+    action: shell . /root/keystonerc_admin && /tmp/setup-tempest.sh
+    tags: wip  
+                
+  - name: run some identity tests
+    action: shell cd /tmp/tempest && nosetests tempest.tests.identity  
+    tags: wip  
+
+  - name: run some compute tests
+    action: shell cd /tmp/tempest && nosetests tempest.tests.identity  
+    tags: wip  
+          
 
   
