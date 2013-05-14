@@ -3,7 +3,7 @@
 #
 # Create a tempest.conf file
 #
-TEMPEST_DIR=/tmp/tempest
+TEMPEST_DIR=/tmp/openstack/tempest
 TEMPEST_CONF=${TEMPEST_DIR}/etc/tempest.conf
 
 cd ${TEMPEST_DIR}
@@ -14,6 +14,12 @@ cp ${TEMPEST_DIR}/etc/tempest.conf.sample ${TEMPEST_CONF}
 #
 IMAGE_ID=$(  glance index | grep cirros  | grep qcow2 | awk '{ print $1 }' )
 IMAGE_ID2=$( glance index | grep quantal | grep qcow2 | awk '{ print $1 }' )
+
+#
+# Select a public network
+#
+PUBLIC_NETWORK_ID=$( echo NA )
+PUBLIC_ROUTER_ID=$( echo NA )
 #
 # Configure it 
 #
@@ -34,4 +40,9 @@ ${CONFIG} compute  image_ref         ${IMAGE_ID}
 ${CONFIG} compute  image_ref_alt     ${IMAGE_ID2} 
 ${CONFIG} compute  flavor_ref        1
 ${CONFIG} compute  flavor_ref_alt    2
+
+${CONFIG} network  public_network_id ${PUBLIC_NETWORK_ID}
+${CONFIG} network  public_router_id  ${PUBLIC_ROUTER_ID}
+${CONFIG} network  quantum_available true
+
 

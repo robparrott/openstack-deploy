@@ -17,7 +17,6 @@
 #  registering them in the inventory under a relevant group
 #
 
-
 - hosts:
   - localhost
   connection: local
@@ -39,6 +38,7 @@
     tags: 
       - quantum
       - images
+      - tempest
       - wip
       
   - name: Capture the EC2 instance's contact info into the inventory
@@ -49,17 +49,10 @@
     with_items: ${ec2.instances}
     tags: 
       - quantum
-      - images 
+      - images
+      - tempest 
       - wip
-    
-# Note: the "only_if" below doesn't work, because the ec2 module always returns "changed=true"
 
-#  - name: Create volumes and attach (will fail if volumes already setup...)
-#    action: ec2_vol instance=${item.id} volume_size=${cinder_volume_size}
-#    with_items: ${ec2.instances}
-#    only_if: '${ec2.changed}'
-#    register: ec2_volumes
-#    ignore_errors: yes
 
 #
 # Dump data on these hosts.
@@ -74,6 +67,7 @@
   tags: 
     - wip
     - quantum
+    - tempest
     
   tasks: 
   - name: ec2 facts
@@ -83,6 +77,29 @@
   - name: dump everything
     local_action: template src=common/templates/dump.j2 dest=./ansible_data_dump.txt 
 
+#
+# Add storage if not present
+#
+- hosts: rdo
+  vars_files: 
+  - iaas/vars/ec2-vars.yaml
+  - packstack/vars/packstack-vars.yaml
+  user: '${remote_user}'
+  sudo: False
+  gather_facts: True
+    
+  tasks:    
+  
+  - name: ec2 facts
+    action: ec2_facts
+    register: ec2_facts
+       
+  - name: Create volumes and attach ...
+    local_action: ec2_vol instance=${ansible_ec2_instance_id} volume_size=${cinder_volume_size}
+    when: ansible_devices.xvdj is not defined
+    register: ec2_volumes
+    
+    
 #******************************
 #*
 #*  BUILD IT
@@ -126,11 +143,11 @@
                        regexp="^exclude=cloud-init" 
                        state=present 
                        create=yes
-                       line="exclude=cloud-init kernel*"     
+                       line="exclude=cloud-init kernel"     
                           
   - name: upgrade lots of packages
     action: shell yum -y upgrade
-                       
+                         
   - name: install some basic packages
     action: yum name=${item} state=present
     with_items:
@@ -143,12 +160,23 @@
       - screen
       - emacs-nox
       - telnet
+      - rsync
+      - gcc
 
-
+#  - name: relocate /var/lib/ to ephemeral storage
+#    action: shell rsync -a /var/lib /media/ephemeral0/lib && mv /var/lib /var/lib.old && ln -s /media/ephemeral0/lib /var/lib
+          
+          
   - name: setup ssh keys for root
     action: shell cd /root/.ssh && rm -f id_rsa* && ssh-keygen -f id_rsa -t rsa -N '' && cat id_rsa.pub >> authorized_keys 
 
+  - name: setup ephemeral storage for OpenStack activities
+    action: file path=${data_store_dir} owner=root group=root state=directory
     
+  - name: link to ephemeral storage
+    action: file src=${data_store_dir} dest=/tmp/openstack owner=root group=root state=link
+       
+       
 #
 # Setup a volume group from the EBS volume we mounted
 #
@@ -166,8 +194,11 @@
     action: shell yum install -y ${repo_rpm}
     ignore_errors: yes
     
-  - name: install packstack 
-    action: yum name=openstack-packstack state=present 
+  - name: install packstack and utils
+    action: yum name=${item} state=present 
+    with_items:
+      - openstack-packstack
+      - openstack-utils
     
   - name: packstack patch
     action: copy src=packstack/files/swift_common.pp 
@@ -180,14 +211,28 @@
 
   - name: push a script to setup an answers file
     action: template src=packstack/templates/setup-answers-file.sh 
-                     dest=/tmp/setup-answers-file.sh  
+                     dest=/tmp/openstack/setup-answers-file.sh  
                      owner=${remote_user} group=${remote_user} mode=0775 
          
   - name: create the answers file  
-    action: shell /tmp/setup-answers-file.sh 
-                                          
+    action: shell /tmp/openstack/setup-answers-file.sh 
+                        
+  - name: setup state dirs for OpenStack activities
+    action: file path=${data_store_dir}/lib/${item} owner=root group=root state=directory
+    with_items:
+      - nova
+      - glance
+      - cinder
+                               
+  - name: link to ephemeral state storage
+    action: file src=${data_store_dir}/lib/${item} dest=/var/lib/${item} owner=root group=root state=link
+    with_items:
+      - nova
+      - glance
+      - cinder
+                                                    
   - name: run packstack 
-    action: shell [ -f /tmp/packstack ] || touch /tmp/packstack && packstack --answer-file=/tmp/answers.txt   
+    action: shell [ -f /tmp/openstack/packstack ] || touch /tmp/openstack/packstack && packstack --answer-file=/tmp/openstack/answers.txt   
     
   - name: setup credentials for keystone
     action: lineinfile dest=/root/.bashrc 
@@ -242,12 +287,12 @@
 
   - name: push a script to wrap these scripts
     action: template src=packstack/templates/quantum-setup.sh 
-                     dest=/tmp/quantum-setup.sh 
+                     dest=/tmp/openstack/quantum-setup.sh 
                      owner=${remote_user} group=${remote_user} mode=0775 
     tags: quantum
     
   - name: setup quantum using default scripts
-    action: shell /tmp/quantum-setup.sh server
+    action: shell /tmp/openstack/quantum-setup.sh server
     tags: quantum
         
   
@@ -324,7 +369,7 @@
 # 8. In order for the IPAM to take place one needs to invoke the DHCP agent. Use the DHCP setup tool
 
   - name: setup dhcp for quantum
-    action: shell /tmp/quantum-setup.sh dhcp
+    action: shell /tmp/openstack/quantum-setup.sh dhcp
     tags: quantum
     
 # 8.1. Start DHCP agent
@@ -336,7 +381,7 @@
 # 9. In order to support floating IP's one need to invoke the Layer 3 agent. Use the L3 agent setup tool
 
   - name: setup  l3 for quantum,
-    action: shell /tmp/quantum-setup.sh l3
+    action: shell /tmp/openstack/quantum-setup.sh l3
     tags: quantum
         
 #9.1. Start the L3 agent
@@ -357,12 +402,12 @@
 
   - name: push a script for a quantum reqistration in keystone
     action: template src=packstack/templates/quantum-registration-script.sh 
-                     dest=/tmp/quantum-registration-script.sh 
+                     dest=/tmp/openstack/quantum-registration-script.sh 
                      owner=${remote_user} group=${remote_user} mode=0775 
     tags: quantum
     
   - name: setup quantum registry entries
-    action: shell  /tmp/quantum-registration-script.sh
+    action: shell  /tmp/openstack/quantum-registration-script.sh
     tags: quantum
         
   - name: restart quantum-relevant services
@@ -377,12 +422,12 @@
           
   - name: push a script to setup some basic quantum network objects for the admin user/tenant
     action: template src=packstack/templates/setup-admin-resources.sh 
-                     dest=/tmp/setup-admin-resources.sh  
+                     dest=/tmp/openstack/setup-admin-resources.sh  
                      owner=${remote_user} group=${remote_user} mode=0775 
     tags: quantum      
     
   - name: setup quantum objects for admin user
-    action: shell  . /root/keystonerc_admin && /tmp/setup-admin-resources.sh 
+    action: shell  . /root/keystonerc_admin && /tmp/openstack/setup-admin-resources.sh 
     tags: quantum      
 
   - name: last step -- see if nove compute successfully restarted, and if not get it running
@@ -390,34 +435,36 @@
     tags: quantum      
       
 
-#----------------------
+#--------------------------------------------------------------------------------------------------
 #
-# Run a test script
+# Run a  script to create a test user
 #
-#----------------------
+#--------------------------------------------------------------------------------------------------
 
   - name: push a script for creating a test user and group setup
     action: template src=packstack/templates/test-setup.sh 
-                     dest=/tmp/test-setup.sh 
+                     dest=/tmp/openstack/test-setup.sh 
                      owner=${remote_user} group=${remote_user} mode=0775 
     tags: quantum
         
   - name: run test script
-    action: shell . /root/keystonerc_admin && /tmp/test-setup.sh
+    action: shell . /root/keystonerc_admin && /tmp/openstack/test-setup.sh
     tags: quantum
 
-#------------------------
+#--------------------------------------------------------------------------------------------------
+#
 # Load some images   
-#------------------------
+#
+#--------------------------------------------------------------------------------------------------
 
   - name: push a script for upload VM images
     action: copy src=common/files/upload-image.sh
-                 dest=/tmp/upload-image.sh
+                 dest=/tmp/openstack/upload-image.sh
                  owner=root group=root mode=755
     tags: images
     
   - name: push some images ...
-    action: shell . /root/keystonerc_admin && /tmp/upload-image.sh ${item}
+    action: shell . /root/keystonerc_admin && /tmp/openstack/upload-image.sh ${item}
     with_items:
       - http://download.cirros-cloud.net/0.3.1/cirros-0.3.1-x86_64-uec.tar.gz
       - http://download.cirros-cloud.net/0.3.1/cirros-0.3.1-x86_64-disk.img  
@@ -427,47 +474,54 @@
     tags: images  
 
 #--------------------------------------------------------------------------------------------------
+#
 # Setup Ceilometer
+#
 #--------------------------------------------------------------------------------------------------
 
     
   #
   # Fix for ceilometer: install mondodb
   #  
-#  - name: install mongodb (a fix)
-#    action: yum name=mongodb-server state=present
-#
-#  - name: install ceilometer pkgs
-#    action: yum name=${item} state=present
-#    with_items:
-#      - openstack-ceilometer-api
-#      - openstack-ceilometer-central
-#      - openstack-ceilometer-collector
-#      - openstack-ceilometer-common
-#      - openstack-ceilometer-compute
-#      - python-ceilometer
-#      - python-ceilometerclient
-#      - python-ceilometerclient-doc
-      
+  - name: install mongodb (a fix)
+    action: yum name=mongodb-server state=present
+
+  - name: install ceilometer pkgs
+    action: yum name=${item} state=present
+    with_items:
+      - openstack-ceilometer-api
+      - openstack-ceilometer-central
+      - openstack-ceilometer-collector
+      - openstack-ceilometer-common
+      - openstack-ceilometer-compute
+      - python-ceilometer
+      - python-ceilometerclient
+      - python-ceilometerclient-doc
+    tags:
+      - ceilometer
+            
 #  - name:  
 
 
-#-----------------------------
+#--------------------------------------------------------------------------------------------------
+#
 # Install & Configure Heat
-#-----------------------------
+#
+#--------------------------------------------------------------------------------------------------
 
-#  - name: install heat pkgs
-#    action: yum name=${item} state=present
-#    with_items:
-#      - openstack-heat-api
-#      - openstack-heat-api-cfn
-#      - openstack-heat-api-cloudwatch
-#      - openstack-heat-cli
-#      - openstack-heat-common
-#      - openstack-heat-engine
-#      - python-heatclient
-#      - python-heatclient-doc
-      
+  - name: install heat pkgs
+    action: yum name=${item} state=present
+    with_items:
+      - openstack-heat-api
+      - openstack-heat-api-cfn
+      - openstack-heat-api-cloudwatch
+      - openstack-heat-cli
+      - openstack-heat-common
+      - openstack-heat-engine
+      - python-heatclient
+      - python-heatclient-doc
+    tags:
+      - ceilometer      
 
 #Configure the Heat database
 #
@@ -503,52 +557,75 @@
 # glance add name=F17-x86_64-cfntools is_public=true disk_format=qcow2 container_format=bare < /var/lib/libvirt/images/F17-x86_64-cfntools.qcow2
 
 
-#------------------------
+#--------------------------------------------------------------------------------------------------
 #
 #   Run Tests 
 #
-#------------------------
+#--------------------------------------------------------------------------------------------------
 
   - name: pull tempest code 
-    git: repo=git://github.com/openstack/tempest.git  dest=/tmp/tempest version=stable/grizzly
-    tags: wip
+    git: repo=git://github.com/openstack/tempest.git  dest=/tmp/openstack/tempest version=stable/grizzly
+    tags: tempest
     
   - name: install python yum modules needed to test
     action: yum name=${item} state=present
     with_items:
       - python-testtools
       - python-pip
-    tags: wip  
+      - gcc
+      - openssl-devel
+      - python-virtualenv
+    tags: tempest  
           
 #  - name: install python modules via pip needed to test
 #    action: pip name=testresources state=present
 #   tags: wip
 
   - name: install python modules via pip needed to test
-    action: shell pip-python install ${item}
+    action: shell pip-python install --update ${item}
     with_items:
+      - nose
       - testtools
       - testresources
-    tags: wip  
+    tags: tempest  
     
             
   - name: copy over a script to setup the tests
     action: template src=packstack/templates/setup-tempest.sh
-                 dest=/tmp/setup-tempest.sh
+                 dest=/tmp/openstack/setup-tempest.sh
                  owner=root group=root mode=755
-    tags: wip                
+    tags: tempest                
 
   - name: setup the tests
-    action: shell . /root/keystonerc_admin && /tmp/setup-tempest.sh
-    tags: wip  
+    action: shell . /root/keystonerc_admin && /tmp/openstack/setup-tempest.sh
+    tags: tempest  
                 
   - name: run some identity tests
-    action: shell cd /tmp/tempest && nosetests tempest.tests.identity  
-    tags: wip  
+    action: shell cd /tmp/openstack/tempest && ./run_tests.sh -V -- "-w tempest/tests/identity"
+    tags: tempest  
 
-  - name: run some compute tests
-    action: shell cd /tmp/tempest && nosetests tempest.tests.identity  
-    tags: wip  
+  - name: run some image tests
+    action: shell cd /tmp/openstack/tempest && ./run_tests.sh -V -- "-w tempest/tests/image"
+    tags: tempest  
           
+  - name: run some volume tests
+    action: shell cd /tmp/openstack/tempest && ./run_tests.sh -V -- "-w tempest/tests/volume"
+    tags: tempest 
 
+  - name: run some network tests
+    action: shell cd /tmp/openstack/tempest && ./run_tests.sh -V -- "-w tempest/tests/network"
+    tags: tempest 
+
+  - name: run some EC2 compatibility tests
+    action: shell cd /tmp/openstack/tempest && ./run_tests.sh -V -- "-w tempest/tests/boto"
+    tags: tempest 
+            
+  - name: run some object storage (swift) tests
+    action: shell cd /tmp/openstack/tempest && ./run_tests.sh -V -- "-w tempest/tests/object_storage"
+    tags: tempest  
+    
+  - name: run some compute tests
+    action: shell cd /tmp/openstack/tempest && ./run_tests.sh -V -- "-w tempest/tests/compute"
+    tags: tempest 
+        
   

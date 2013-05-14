@@ -1,7 +1,7 @@
 #!/bin/bash
 
  . /root/keystonerc_admin 
- . /tmp/answers.txt
+ . /tmp/openstack/answers.txt
  
 PUBLIC_IP={{ ansible_ec2_public_ipv4 }} 
 PRIVATE_IP={{ ansible_eth0.ipv4.address }}
